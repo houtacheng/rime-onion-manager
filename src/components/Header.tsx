@@ -18,7 +18,7 @@ export const Header: React.FC<HeaderProps> = ({ onReload, onOpenFolder, reloadin
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold tracking-tight text-white">洋蔥注音 Rime 管理器</h1>
             <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              v1.0.0
+              v1.1.0
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
