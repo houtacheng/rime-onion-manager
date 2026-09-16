@@ -48,12 +48,24 @@
       "electron/**/*",
       "assets/**/*",
       "build/icon.ico",
+      "build/icon.icns",
       "package.json"
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": ["dmg", "zip"],
-      "icon": "build/icon.png"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64"]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [
