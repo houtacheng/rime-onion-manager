@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restoreBackup: (backupId) => ipcRenderer.invoke('restore-backup', backupId),
   reloadRime: () => ipcRenderer.invoke('reload-rime'),
   openRimeFolder: () => ipcRenderer.invoke('open-rime-folder'),
+  selectLocalRepo: () => ipcRenderer.invoke('select-local-repo'),
+  deployLocalRepo: (filePath) => ipcRenderer.invoke('deploy-local-repo', filePath),
   onLog: (callback) => {
     const listener = (_event, message) => callback(message);
     ipcRenderer.on('deploy-log', listener);

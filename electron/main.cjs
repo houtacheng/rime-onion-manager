@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, Notification, dialog } = require('electron');
 const path = require('path');
 const rimeService = require('./rime-service.cjs');
 
@@ -235,6 +235,28 @@ ipcMain.handle('reload-rime', async () => {
 ipcMain.handle('open-rime-folder', async () => {
   const dir = rimeService.getRimeDir();
   return await shell.openPath(dir);
+});
+
+ipcMain.handle('select-local-repo', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '選擇下載的洋蔥注音 REPO (ZIP 壓縮檔或資料夾)',
+    properties: ['openFile', 'openDirectory'],
+    filters: [
+      { name: 'ZIP 壓縮包或所有檔案', extensions: ['zip'] },
+      { name: '所有檔案', extensions: ['*'] }
+    ]
+  });
+  return result;
+});
+
+ipcMain.handle('deploy-local-repo', async (event, filePath) => {
+  const logCallback = (msg) => {
+    event.sender.send('deploy-log', msg);
+  };
+  return await rimeService.deployFromLocal({
+    sourcePath: filePath,
+    logCallback
+  });
 });
 
 app.whenReady().then(() => {

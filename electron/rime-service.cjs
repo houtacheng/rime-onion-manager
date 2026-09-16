@@ -79,14 +79,23 @@ async function fetchRemoteVersions() {
   };
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
     // Check releases first
-    const relRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, { headers });
     let releases = [];
-    if (relRes.ok) {
-      releases = await relRes.json();
-    }
+    try {
+      const relRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
+        headers,
+        signal: controller.signal
+      });
+      if (relRes.ok) {
+        releases = await relRes.json();
+      }
+    } catch (e) {}
 
     if (releases.length > 0) {
+      clearTimeout(timer);
       return releases.map(r => ({
         id: r.tag_name,
         sha: r.target_commitish || r.tag_name,
@@ -100,9 +109,14 @@ async function fetchRemoteVersions() {
     }
 
     // If no releases, fetch recent commits
-    const commitRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=25`, { headers });
+    const commitRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?per_page=25`, {
+      headers,
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
     if (!commitRes.ok) {
-      throw new Error(`GitHub API 回傳錯誤: ${commitRes.statusText}`);
+      throw new Error(`GitHub API 回傳狀態碼 ${commitRes.status}: ${commitRes.statusText}`);
     }
     const commits = await commitRes.json();
     return commits.map(c => ({
@@ -117,6 +131,9 @@ async function fetchRemoteVersions() {
       downloadUrl: `https://github.com/${GITHUB_REPO}/archive/${c.sha}.zip`
     }));
   } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('連線 GitHub 逾時（8秒），可能是網路或防火牆限制。建議使用「本地匯入」功能。');
+    }
     console.error('fetchRemoteVersions error:', err);
     throw err;
   }
@@ -438,6 +455,107 @@ function runCmd(command, cwd) {
   });
 }
 
+async function deployFromLocal({ sourcePath, logCallback = () => {} }) {
+  const rimeDir = getRimeDir();
+  if (!fs.existsSync(rimeDir)) {
+    fs.mkdirSync(rimeDir, { recursive: true });
+  }
+
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`指定的檔案或資料夾不存在: ${sourcePath}`);
+  }
+
+  const stat = fs.statSync(sourcePath);
+  const isZip = !stat.isDirectory() && sourcePath.toLowerCase().endsWith('.zip');
+
+  logCallback(`[1/4] 建立更新前安全快照備份...`);
+  let prevSha = null;
+  try {
+    const info = await getSystemInfo();
+    prevSha = info.installedSha;
+  } catch (e) {}
+  const baseName = path.basename(sourcePath);
+  await createBackup(`本地匯入前自動快照 (${baseName})`, prevSha);
+  logCallback(`[✓] 安全快照備份完成`);
+
+  let contentRoot = sourcePath;
+  let tempDir = null;
+
+  if (isZip) {
+    logCallback(`[2/4] 正在解壓縮本地 ZIP 檔案 (${baseName})...`);
+    const zip = new AdmZip(sourcePath);
+    tempDir = path.join(os.tmpdir(), `rime-local-${Date.now()}`);
+    zip.extractAllTo(tempDir, true);
+    logCallback(`[✓] 解壓縮成功`);
+
+    const extractedItems = fs.readdirSync(tempDir);
+    contentRoot = tempDir;
+    if (extractedItems.length === 1 && fs.statSync(path.join(tempDir, extractedItems[0])).isDirectory()) {
+      contentRoot = path.join(tempDir, extractedItems[0]);
+    }
+  } else {
+    logCallback(`[2/4] 讀取本地資料夾: ${baseName}`);
+  }
+
+  logCallback(`[3/4] 正在複製設定檔至 Rime 目錄... (保護個人詞頻 userdb)`);
+  const protectedItems = new Set([
+    'installation.yaml',
+    'user.yaml',
+    'custom_phrase.txt',
+    '.backups',
+    '.git',
+    '.onion_manager.json'
+  ]);
+
+  function copyNewFiles(src, dest) {
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+
+      if (entry.name.endsWith('.userdb')) continue;
+      if (protectedItems.has(entry.name) && fs.existsSync(destPath)) continue;
+
+      if (entry.isDirectory()) {
+        if (!fs.existsSync(destPath)) {
+          fs.mkdirSync(destPath, { recursive: true });
+        }
+        copyNewFiles(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  }
+
+  copyNewFiles(contentRoot, rimeDir);
+
+  if (tempDir) {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (e) {}
+  }
+
+  // Record state
+  const state = {
+    installedSha: 'local',
+    installedMessage: `本地匯入: ${baseName}`,
+    installedAt: new Date().toISOString()
+  };
+  fs.writeFileSync(path.join(rimeDir, '.onion_manager.json'), JSON.stringify(state, null, 2));
+
+  logCallback(`[✓] 本地檔案部署完畢！`);
+
+  logCallback(`[4/4] 正在觸發 Rime 輸入法重新部署...`);
+  const reloadRes = await reloadRime();
+  if (reloadRes.success) {
+    logCallback(`[🎉] 重新部署成功！所有設定已即時生效。`);
+  } else {
+    logCallback(`[⚠️] 輸入法重新部署回應: ${reloadRes.output || '請手動重新部署'}`);
+  }
+
+  return { success: true, sourceName: baseName };
+}
+
 module.exports = {
   getRimeDir,
   getSystemInfo,
@@ -445,6 +563,7 @@ module.exports = {
   listBackups,
   createBackup,
   deployVersion,
+  deployFromLocal,
   restoreBackup,
   reloadRime,
   getPlatformName

@@ -11,6 +11,8 @@ declare global {
       restoreBackup: (backupId: string) => Promise<{ success: boolean }>;
       reloadRime: () => Promise<{ success: boolean; output: string }>;
       openRimeFolder: () => Promise<string>;
+      selectLocalRepo: () => Promise<{ canceled: boolean; filePaths: string[] }>;
+      deployLocalRepo: (filePath: string) => Promise<DeployResult>;
       onLog: (callback: (msg: string) => void) => () => void;
     };
   }
@@ -124,5 +126,36 @@ export const api = {
       return;
     }
     await fetch(`${API_BASE}/open-folder`, { method: 'POST' });
+  },
+
+  async selectLocalRepo(): Promise<{ canceled: boolean; filePaths: string[] }> {
+    if (isElectron && window.electronAPI?.selectLocalRepo) {
+      return await window.electronAPI.selectLocalRepo();
+    }
+    return { canceled: true, filePaths: [] };
+  },
+
+  async deployLocalRepo(filePath: string, onLog?: (msg: string) => void): Promise<DeployResult> {
+    if (isElectron && window.electronAPI?.deployLocalRepo) {
+      let cleanup: (() => void) | undefined;
+      if (onLog) {
+        cleanup = window.electronAPI.onLog(onLog);
+      }
+      try {
+        return await window.electronAPI.deployLocalRepo(filePath);
+      } finally {
+        cleanup?.();
+      }
+    }
+    const res = await fetch(`${API_BASE}/deploy-local`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath })
+    });
+    const data = await res.json();
+    if (data.logs && onLog) {
+      data.logs.forEach(onLog);
+    }
+    return data;
   }
 };
