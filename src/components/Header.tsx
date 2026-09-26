@@ -16,7 +16,7 @@ export const Header: React.FC<HeaderProps> = ({
   onReload,
   onOpenFolder,
   reloading,
-  appVersion = '1.3.0',
+  appVersion = '1.3.1',
   hasAppUpdate = false,
   checkingAppUpdate = false,
   onCheckAppUpdate,
@@ -25,8 +25,8 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80">
       <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-2xl shadow-lg shadow-amber-500/20 shrink-0">
-          🧅
+        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-600/30 to-amber-400/20 border border-amber-500/30 flex items-center justify-center p-1.5 shadow-lg shadow-amber-500/10 shrink-0 overflow-hidden">
+          <img src="/onion.png" alt="洋蔥注音" className="w-full h-full object-contain drop-shadow" />
         </div>
         <div>
           <div className="flex items-center gap-2">

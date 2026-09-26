@@ -32,10 +32,10 @@ function getAppVersion() {
     const pkgPath = path.join(__dirname, '../package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      return pkg.version || '1.3.0';
+      return pkg.version || '1.3.1';
     }
   } catch (e) {}
-  return '1.3.0';
+  return '1.3.1';
 }
 
 function getRimeDir() {
