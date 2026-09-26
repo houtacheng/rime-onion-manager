@@ -695,15 +695,15 @@ function findMatchingAsset(assets = []) {
     const isArm = arch === 'arm64';
     let asset = null;
     if (isArm) {
-      asset = assets.find(a => a.name.includes('arm64') && a.name.endsWith('.zip')) ||
-              assets.find(a => a.name.includes('arm64') && a.name.endsWith('.dmg')) ||
-              assets.find(a => a.name.endsWith('.zip')) ||
-              assets.find(a => a.name.endsWith('.dmg'));
+      asset = assets.find(a => a.name.includes('arm64') && a.name.endsWith('.dmg')) ||
+              assets.find(a => a.name.endsWith('.dmg')) ||
+              assets.find(a => a.name.includes('arm64') && a.name.endsWith('.zip')) ||
+              assets.find(a => a.name.endsWith('.zip'));
     } else {
-      asset = assets.find(a => (a.name.includes('x64') || a.name.includes('mac')) && a.name.endsWith('.zip')) ||
-              assets.find(a => (a.name.includes('x64') || a.name.includes('mac')) && a.name.endsWith('.dmg')) ||
-              assets.find(a => a.name.endsWith('.zip')) ||
-              assets.find(a => a.name.endsWith('.dmg'));
+      asset = assets.find(a => (a.name.includes('x64') || a.name.includes('mac')) && a.name.endsWith('.dmg')) ||
+              assets.find(a => a.name.endsWith('.dmg')) ||
+              assets.find(a => (a.name.includes('x64') || a.name.includes('mac')) && a.name.endsWith('.zip')) ||
+              assets.find(a => a.name.endsWith('.zip'));
     }
     if (asset) {
       return {
@@ -851,9 +851,14 @@ async function downloadAndInstallAppUpdate({ asset, logCallback = () => {}, onBe
   } else if (platform === 'darwin') {
     logCallback(`[3/3] 正在更新 macOS 應用程式套件...`);
     if (targetFileName.endsWith('.zip')) {
-      const zip = new AdmZip(tempFilePath);
       const extractDir = path.join(os.tmpdir(), `rime-app-extract-${Date.now()}`);
-      zip.extractAllTo(extractDir, true);
+      fs.mkdirSync(extractDir, { recursive: true });
+      try {
+        await runCmd(`/usr/bin/ditto -xk "${tempFilePath}" "${extractDir}"`);
+      } catch (e) {
+        const zip = new AdmZip(tempFilePath);
+        zip.extractAllTo(extractDir, true);
+      }
 
       const findApp = (dir) => {
         const items = fs.readdirSync(dir);
