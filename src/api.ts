@@ -1,4 +1,4 @@
-import { SystemInfo, RemoteVersion, BackupItem, DeployResult } from './types';
+import { SystemInfo, RemoteVersion, BackupItem, DeployResult, AppUpdateInfo, TrimeExportResult, TrimeExportOptions } from './types';
 
 declare global {
   interface Window {
@@ -13,6 +13,13 @@ declare global {
       openRimeFolder: () => Promise<string>;
       selectLocalRepo: () => Promise<{ canceled: boolean; filePaths: string[] }>;
       deployLocalRepo: (filePath: string) => Promise<DeployResult>;
+      checkAppUpdate: () => Promise<AppUpdateInfo>;
+      installAppUpdate: (asset: { name: string; url: string; size?: number }) => Promise<{ success: boolean; message?: string }>;
+      openExternalUrl: (url: string) => Promise<{ success: boolean }>;
+      showSaveDialog: (options: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePath?: string }>;
+      exportTrimePackage: (options: TrimeExportOptions) => Promise<TrimeExportResult>;
+      openTrimeEditor: (options?: { zipPath?: string }) => Promise<{ success: boolean; error?: string; opened?: string }>;
+      showItemInFolder: (path: string) => Promise<{ success: boolean }>;
       onLog: (callback: (msg: string) => void) => () => void;
     };
   }
@@ -157,5 +164,104 @@ export const api = {
       data.logs.forEach(onLog);
     }
     return data;
+  },
+
+  async checkAppUpdate(): Promise<AppUpdateInfo> {
+    if (isElectron && window.electronAPI?.checkAppUpdate) {
+      return await window.electronAPI.checkAppUpdate();
+    }
+    const res = await fetch(`${API_BASE}/check-app-update`);
+    return await res.json();
+  },
+
+  async installAppUpdate(
+    asset: { name: string; url: string; size?: number },
+    onLog?: (msg: string) => void
+  ): Promise<{ success: boolean; message?: string }> {
+    if (isElectron && window.electronAPI?.installAppUpdate) {
+      let cleanup: (() => void) | undefined;
+      if (onLog) {
+        cleanup = window.electronAPI.onLog(onLog);
+      }
+      try {
+        return await window.electronAPI.installAppUpdate(asset);
+      } finally {
+        cleanup?.();
+      }
+    }
+    const res = await fetch(`${API_BASE}/install-app-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asset })
+    });
+    const data = await res.json();
+    if (data.logs && onLog) {
+      data.logs.forEach(onLog);
+    }
+    return data;
+  },
+
+  async openExternal(url: string): Promise<void> {
+    if (isElectron && window.electronAPI?.openExternalUrl) {
+      await window.electronAPI.openExternalUrl(url);
+      return;
+    }
+    await fetch(`${API_BASE}/open-external`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+  },
+
+  async showSaveDialog(options: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }): Promise<{ canceled: boolean; filePath?: string }> {
+    if (isElectron && window.electronAPI?.showSaveDialog) {
+      return await window.electronAPI.showSaveDialog(options);
+    }
+    return { canceled: true };
+  },
+
+  async exportTrimePackage(
+    options: TrimeExportOptions,
+    onLog?: (msg: string) => void
+  ): Promise<TrimeExportResult> {
+    if (isElectron && window.electronAPI?.exportTrimePackage) {
+      let cleanup: (() => void) | undefined;
+      if (onLog) {
+        cleanup = window.electronAPI!.onLog(onLog);
+      }
+      try {
+        return await window.electronAPI.exportTrimePackage(options);
+      } finally {
+        cleanup?.();
+      }
+    }
+    const res = await fetch(`${API_BASE}/export-trime-package`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options)
+    });
+    const data = await res.json();
+    if (data.logs && onLog) {
+      data.logs.forEach(onLog);
+    }
+    return data;
+  },
+
+  async showItemInFolder(path: string): Promise<void> {
+    if (isElectron && window.electronAPI?.showItemInFolder) {
+      await window.electronAPI.showItemInFolder(path);
+    }
+  },
+
+  async openTrimeEditor(options?: { zipPath?: string }): Promise<{ success: boolean; error?: string; opened?: string }> {
+    if (isElectron && window.electronAPI?.openTrimeEditor) {
+      return await window.electronAPI.openTrimeEditor(options);
+    }
+    const res = await fetch(`${API_BASE}/open-trime-editor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options || {})
+    });
+    return await res.json();
   }
 };

@@ -5,6 +5,24 @@ export interface SystemInfo {
   installedSha: string | null;
   installedMessage: string | null;
   installedDate: string | null;
+  appVersion?: string;
+}
+
+export interface AppUpdateInfo {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseUrl?: string;
+  releaseName?: string;
+  releaseNotes?: string;
+  publishedAt?: string;
+  downloadAsset?: {
+    name: string;
+    url: string;
+    size: number;
+  };
+  error?: string;
+  message?: string;
 }
 
 export interface RemoteVersion {
@@ -29,6 +47,28 @@ export interface BackupItem {
 export interface DeployResult {
   success: boolean;
   installedSha?: string;
+  error?: string;
+  logs?: string[];
+}
+
+export type TrimeLayoutType = 'samsung' | 'standard' | 'qwerty';
+
+export interface TrimeExportOptions {
+  layoutType: TrimeLayoutType;
+  targetZipPath?: string;
+  versionSha?: string;
+  versionTitle?: string;
+  openInEditor?: boolean;
+}
+
+export interface TrimeExportResult {
+  success: boolean;
+  zipPath?: string;
+  zipName?: string;
+  sizeMB?: string;
+  layoutType?: TrimeLayoutType;
+  stagingZipPath?: string | null;
+  editorUrl?: string;
   error?: string;
   logs?: string[];
 }

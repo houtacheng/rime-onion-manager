@@ -1,8 +1,10 @@
 const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, Notification, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const rimeService = require('./rime-service.cjs');
 
 let mainWindow = null;
+let editorWindow = null;
 let tray = null;
 let isQuitting = false;
 
@@ -123,6 +125,34 @@ function setupTray() {
           label: '📂 開啟 Rime 設定資料夾',
           click: () => {
             shell.openPath(rimeService.getRimeDir());
+          }
+        },
+        {
+          label: '🔄 檢查管理器新版本...',
+          click: async () => {
+            const updateInfo = await rimeService.checkAppUpdate();
+            if (Notification.isSupported()) {
+              if (updateInfo.hasUpdate) {
+                new Notification({
+                  title: '發現新版本！',
+                  body: `洋蔥注音管理器有新版本 ${updateInfo.latestVersion} 可用！`
+                }).show();
+              } else if (updateInfo.error) {
+                new Notification({
+                  title: '檢查更新失敗',
+                  body: updateInfo.error
+                }).show();
+              } else {
+                new Notification({
+                  title: '洋蔥注音管理器',
+                  body: `目前已是最新版本 (v${updateInfo.currentVersion})。`
+                }).show();
+              }
+            }
+            if (updateInfo.hasUpdate && mainWindow) {
+              mainWindow.show();
+              mainWindow.focus();
+            }
           }
         },
         { type: 'separator' },
@@ -257,6 +287,101 @@ ipcMain.handle('deploy-local-repo', async (event, filePath) => {
     sourcePath: filePath,
     logCallback
   });
+});
+
+ipcMain.handle('check-app-update', async () => {
+  return await rimeService.checkAppUpdate();
+});
+
+ipcMain.handle('install-app-update', async (event, asset) => {
+  const logCallback = (msg) => {
+    event.sender.send('deploy-log', msg);
+  };
+  return await rimeService.downloadAndInstallAppUpdate({
+    asset,
+    logCallback,
+    onBeforeQuit: () => {
+      isQuitting = true;
+      setTimeout(() => {
+        app.quit();
+      }, 1000);
+    }
+  });
+});
+
+ipcMain.handle('open-external-url', async (_event, url) => {
+  if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+    await shell.openExternal(url);
+    return { success: true };
+  }
+  return { success: false, error: 'Invalid URL' };
+});
+
+ipcMain.handle('show-save-dialog', async (_event, options) => {
+  const result = await dialog.showSaveDialog(mainWindow, options);
+  return result;
+});
+
+ipcMain.handle('export-trime-package', async (event, data) => {
+  const logCallback = (msg) => {
+    event.sender.send('deploy-log', msg);
+  };
+  return await rimeService.exportTrimePackage({
+    layoutType: data?.layoutType || 'standard',
+    targetZipPath: data?.targetZipPath,
+    versionSha: data?.versionSha,
+    versionTitle: data?.versionTitle,
+    logCallback
+  });
+});
+
+ipcMain.handle('show-item-in-folder', async (_event, filePath) => {
+  if (filePath) {
+    shell.showItemInFolder(filePath);
+  }
+  return { success: true };
+});
+
+ipcMain.handle('open-trime-editor', async (_event, options) => {
+  const editorDir = rimeService.getTrimeEditorDir();
+  const indexPath = path.join(editorDir, 'index.html');
+
+  if (!fs.existsSync(indexPath)) {
+    return { success: false, error: `找不到 Trime 編輯器: ${indexPath}` };
+  }
+
+  const editorUrl = `file://${indexPath}?auto=1&t=${Date.now()}`;
+
+  if (editorWindow && !editorWindow.isDestroyed()) {
+    if (editorWindow.isMinimized()) editorWindow.restore();
+    editorWindow.show();
+    editorWindow.focus();
+    editorWindow.loadURL(editorUrl);
+    return { success: true, opened: 'existing' };
+  }
+
+  editorWindow = new BrowserWindow({
+    width: 1280,
+    height: 860,
+    minWidth: 960,
+    minHeight: 650,
+    title: '🎹 Trime 鍵盤佈局編輯器 (洋蔥注音整合版)',
+    icon: path.join(__dirname, '../build/icon.ico'),
+    backgroundColor: '#1a1d23',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false // 允許載入本機暫存 ZIP
+    }
+  });
+
+  editorWindow.loadURL(editorUrl);
+
+  editorWindow.on('closed', () => {
+    editorWindow = null;
+  });
+
+  return { success: true, opened: 'new' };
 });
 
 app.whenReady().then(() => {

@@ -11,6 +11,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openRimeFolder: () => ipcRenderer.invoke('open-rime-folder'),
   selectLocalRepo: () => ipcRenderer.invoke('select-local-repo'),
   deployLocalRepo: (filePath) => ipcRenderer.invoke('deploy-local-repo', filePath),
+  checkAppUpdate: () => ipcRenderer.invoke('check-app-update'),
+  installAppUpdate: (asset) => ipcRenderer.invoke('install-app-update', asset),
+  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+  showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
+  exportTrimePackage: (data) => ipcRenderer.invoke('export-trime-package', data),
+  openTrimeEditor: (options) => ipcRenderer.invoke('open-trime-editor', options),
+  showItemInFolder: (path) => ipcRenderer.invoke('show-item-in-folder', path),
   onLog: (callback) => {
     const listener = (_event, message) => callback(message);
     ipcRenderer.on('deploy-log', listener);

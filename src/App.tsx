@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './api';
-import { SystemInfo, RemoteVersion, BackupItem } from './types';
+import { SystemInfo, RemoteVersion, BackupItem, AppUpdateInfo } from './types';
 import { Header } from './components/Header';
 import { StatusCard } from './components/StatusCard';
 import { UpdateCard } from './components/UpdateCard';
 import { HistorySection } from './components/HistorySection';
 import { BackupSection } from './components/BackupSection';
 import { LogModal } from './components/LogModal';
-import { FolderArchive, UploadCloud } from 'lucide-react';
+import { TrimeExportCard } from './components/TrimeExportCard';
+import { AndroidExportModal } from './components/AndroidExportModal';
+import { FolderArchive, UploadCloud, Sparkles, ExternalLink, X, DownloadCloud } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
@@ -20,11 +22,20 @@ export const App: React.FC = () => {
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // App self-update states
+  const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
+  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const [dismissedUpdate, setDismissedUpdate] = useState(false);
+  const [updatingApp, setUpdatingApp] = useState(false);
+
   // Log modal state
   const [logs, setLogs] = useState<string[]>([]);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [logModalTitle, setLogModalTitle] = useState('');
   const [isFinished, setIsFinished] = useState(false);
+
+  // Android / Trime export modal state
+  const [androidModalOpen, setAndroidModalOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'history' | 'backups'>('history');
 
@@ -54,8 +65,59 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleCheckAppUpdate = async (manual = false) => {
+    try {
+      setCheckingAppUpdate(true);
+      const updateInfo = await api.checkAppUpdate();
+      setAppUpdate(updateInfo);
+      if (manual) {
+        if (updateInfo.hasUpdate) {
+          setDismissedUpdate(false);
+        } else if (updateInfo.error) {
+          alert(`檢查更新失敗: ${updateInfo.error}`);
+        } else {
+          alert(`目前已是最新版本 (v${updateInfo.currentVersion})！`);
+        }
+      }
+    } catch (err: any) {
+      if (manual) {
+        alert(`檢查更新失敗: ${err.message}`);
+      }
+    } finally {
+      setCheckingAppUpdate(false);
+    }
+  };
+
+  const handleInstallAppUpdate = async () => {
+    if (!appUpdate?.downloadAsset) {
+      if (appUpdate?.releaseUrl) {
+        api.openExternal(appUpdate.releaseUrl);
+      }
+      return;
+    }
+
+    setLogs([]);
+    setLogModalTitle(`正在更新管理器至 ${appUpdate.latestVersion}`);
+    setIsFinished(false);
+    setLogModalOpen(true);
+    setUpdatingApp(true);
+
+    try {
+      await api.installAppUpdate(appUpdate.downloadAsset, (msg) => {
+        setLogs((prev) => [...prev, msg]);
+      });
+      setIsFinished(true);
+    } catch (err: any) {
+      setLogs((prev) => [...prev, `[❌ 更新失敗] ${err.message}`]);
+      setIsFinished(true);
+    } finally {
+      setUpdatingApp(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    handleCheckAppUpdate(false);
   }, []);
 
   const handleReload = async () => {
@@ -162,6 +224,10 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleExportForTrime = (_version?: RemoteVersion) => {
+    setAndroidModalOpen(true);
+  };
+
   // Drag and drop handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -209,7 +275,79 @@ export const App: React.FC = () => {
           onReload={handleReload}
           onOpenFolder={handleOpenFolder}
           reloading={reloading}
+          appVersion={systemInfo?.appVersion || '1.2.2'}
+          hasAppUpdate={Boolean(appUpdate?.hasUpdate)}
+          checkingAppUpdate={checkingAppUpdate}
+          onCheckAppUpdate={() => handleCheckAppUpdate(true)}
+          onOpenAndroidExport={() => setAndroidModalOpen(true)}
         />
+
+        {/* App Self-Update Notification Banner */}
+        {appUpdate?.hasUpdate && !dismissedUpdate && (
+          <div className="w-full bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-amber-950/30 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-amber-200">
+                    發現洋蔥注音管理器新版本：{appUpdate.latestVersion}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    最新釋出
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5 line-clamp-1">
+                  {appUpdate.releaseName || '包含最新效能優化與修復'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              {appUpdate.downloadAsset ? (
+                <button
+                  onClick={handleInstallAppUpdate}
+                  disabled={updatingApp}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg shadow-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  title="直接在背景下載並以管理員權限安裝更新"
+                >
+                  <DownloadCloud className={`w-3.5 h-3.5 ${updatingApp ? 'animate-bounce' : ''}`} />
+                  <span>{updatingApp ? '安裝更新中...' : '⚡ 直接安裝更新'}</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (appUpdate.releaseUrl) {
+                      api.openExternal(appUpdate.releaseUrl);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg shadow-sm transition-all hover:scale-105 active:scale-95"
+                >
+                  <span>前往下載更新</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {appUpdate.releaseUrl && appUpdate.downloadAsset && (
+                <button
+                  onClick={() => api.openExternal(appUpdate.releaseUrl!)}
+                  className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  title="在瀏覽器查看更新說明"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              <button
+                onClick={() => setDismissedUpdate(true)}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition-colors"
+                title="關閉提示"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Current Status */}
         <StatusCard info={systemInfo} loading={loading} />
@@ -224,6 +362,16 @@ export const App: React.FC = () => {
           deploying={deploying}
           loading={loading}
           error={networkError}
+        />
+
+        {/* Android / Trime Export Card */}
+        <TrimeExportCard
+          versions={versions}
+          loading={loading}
+          exporting={false}
+          error={networkError}
+          onExport={handleExportForTrime}
+          onOpenModal={() => setAndroidModalOpen(true)}
         />
 
         {/* Tabs for Version History and Local Snapshots */}
@@ -304,7 +452,7 @@ export const App: React.FC = () => {
             >
               houtacheng/rime-bopomo-onion-mixed
             </a>{' '}
-            打造 · 支援 macOS (鼠鬚管) 與 Windows (小狼毫)
+            打造 · 支援 macOS (鼠鬚管)、Windows (小狼毫) 與 Android (同文輸入法 Trime)
           </p>
         </footer>
       </div>
@@ -316,6 +464,14 @@ export const App: React.FC = () => {
         onClose={() => setLogModalOpen(false)}
         title={logModalTitle}
         isFinished={isFinished}
+      />
+
+      {/* Android / Trime Export Modal */}
+      <AndroidExportModal
+        isOpen={androidModalOpen}
+        onClose={() => setAndroidModalOpen(false)}
+        versions={versions}
+        installedSha={systemInfo?.installedSha}
       />
     </main>
   );
